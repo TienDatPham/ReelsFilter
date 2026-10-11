@@ -1,0 +1,136 @@
+{
+  "name": "ReelsFilter",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "reelsfilter-telegram",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/chat",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "llama3.2",
+          "stream": false,
+          "messages": [
+            {
+              "role": "user",
+              "content": "=You are a content classifier. Given a Facebook Reel URL, pick exactly ONE category from this list: language, game, book, film, study, food, travel, tech, other.\n\nURL: {{ $json.message.text }}\n\nRespond ONLY with valid JSON in this exact format: {\"category\": \"<name>\", \"confidence\": <0.0-1.0>}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "a1b2c3d4-0002-0002-0002-000000000002",
+      "name": "Classify with Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.message.content;\nconst match = raw.match(/\\{[^}]+\\}/);\nlet category = 'other';\nlet confidence = 0;\n\nif (match) {\n  try {\n    const parsed = JSON.parse(match[0]);\n    const validCategories = ['language','game','book','film','study','food','travel','tech','other'];\n    category = validCategories.includes(parsed.category) ? parsed.category : 'other';\n    confidence = Math.round((parsed.confidence || 0) * 100) / 100;\n  } catch (e) {}\n}\n\nreturn [{\n  json: {\n    url: $('Telegram Trigger').first().json.message.text,\n    category,\n    confidence,\n    date: new Date().toISOString().split('T')[0],\n    chat_id: $('Telegram Trigger').first().json.message.chat.id,\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0003-0003-0003-000000000003",
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Reels",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "URL": "={{ $json.url }}",
+            "Category": "={{ $json.category }}",
+            "Confidence": "={{ $json.confidence }}",
+            "Date": "={{ $json.date }}"
+          }
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "a1b2c3d4-0004-0004-0004-000000000004",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [900, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "=✅ Saved!\n\n*Category:* {{ $json.category }}\n*Confidence:* {{ $json.confidence }}\n*Date:* {{ $json.date }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "a1b2c3d4-0005-0005-0005-000000000005",
+      "name": "Send Confirmation",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1120, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{"node": "Classify with Ollama", "type": "main", "index": 0}]]
+    },
+    "Classify with Ollama": {
+      "main": [[{"node": "Parse Response", "type": "main", "index": 0}]]
+    },
+    "Parse Response": {
+      "main": [[{"node": "Save to Google Sheets", "type": "main", "index": 0}]]
+    },
+    "Save to Google Sheets": {
+      "main": [[{"node": "Send Confirmation", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
