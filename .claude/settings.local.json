@@ -3,7 +3,9 @@
     "allow": [
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "mcp__claude-code-remote__add_repo",
+      "Bash(git -C /home/user/ReelsFilter push -u origin claude/youthful-dirac-vnt905)"
     ]
   }
 }
